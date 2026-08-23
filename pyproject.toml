@@ -1,0 +1,17 @@
+[project]
+name = "retryq"
+version = "0.1.0"
+description = "Show the backoff schedule a retry policy produces, from a file or stdin"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+
+[project.scripts]
+retryq = "retryq.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["retryq*"]
