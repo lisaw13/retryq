@@ -90,3 +90,9 @@ or install locally with `pip install -e .` to get the `retryq` command.
 
 Early. Currently supports exponential backoff with optional cap and
 jitter, read from a file or stdin. See the roadmap for what's planned.
+
+## Tests
+
+```
+python -m unittest discover
+```
