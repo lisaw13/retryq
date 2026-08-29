@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 VALID_JITTER = {"none", "full", "equal"}
+VALID_STRATEGY = {"exponential", "linear", "constant"}
 
 
 class PolicyError(ValueError):
@@ -23,6 +24,7 @@ class RetryPolicy:
     multiplier: float = 2.0
     max_delay: Optional[float] = None
     jitter: str = "none"
+    strategy: str = "exponential"
 
     @classmethod
     def from_dict(cls, data):
@@ -46,6 +48,15 @@ class RetryPolicy:
             raise PolicyError("base_delay must be a number")
         if base_delay < 0:
             raise PolicyError("base_delay cannot be negative")
+
+        strategy = data.get("strategy", "exponential")
+        if strategy not in VALID_STRATEGY:
+            raise PolicyError(
+                "strategy must be one of {}, got {!r}".format(sorted(VALID_STRATEGY), strategy)
+            )
+
+        if strategy != "exponential" and "multiplier" in data:
+            raise PolicyError("multiplier only applies to the exponential strategy")
 
         try:
             multiplier = float(data.get("multiplier", 2.0))
@@ -75,9 +86,14 @@ class RetryPolicy:
             multiplier=multiplier,
             max_delay=max_delay,
             jitter=jitter,
+            strategy=strategy,
         )
 
     def _uncapped_delay(self, attempt):
+        if self.strategy == "constant":
+            return self.base_delay
+        if self.strategy == "linear":
+            return self.base_delay * attempt
         return self.base_delay * (self.multiplier ** (attempt - 1))
 
     def will_retry(self, attempt):

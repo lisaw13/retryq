@@ -26,8 +26,14 @@ random by design.
 
 - `max_attempts` (required) — how many retry attempts the policy allows.
 - `base_delay` (required) — delay in seconds before the first retry.
-- `multiplier` (default `2.0`) — how much the delay grows each attempt
-  (exponential backoff).
+- `strategy` (default `"exponential"`) — how the delay grows with each
+  attempt:
+  - `exponential` — `base_delay * multiplier ^ (attempt - 1)`.
+  - `linear` — `base_delay * attempt`.
+  - `constant` — always `base_delay`.
+- `multiplier` (default `2.0`) — growth factor for `exponential`. Only
+  valid with that strategy; set it for `linear` or `constant` and retryq
+  will reject the policy.
 - `max_delay` (optional) — cap on the delay, applied before jitter.
 - `jitter` (default `"none"`) — one of:
   - `none` — no randomness, delay is exactly the computed value.
@@ -88,8 +94,9 @@ or install locally with `pip install -e .` to get the `retryq` command.
 
 ## Status
 
-Early. Currently supports exponential backoff with optional cap and
-jitter, read from a file or stdin. See the roadmap for what's planned.
+Early. Currently supports exponential, linear, and constant backoff,
+with an optional cap and jitter, read from a file or stdin. See the
+roadmap for what's planned.
 
 ## Tests
 

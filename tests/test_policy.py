@@ -60,11 +60,24 @@ class FromDictValidation(unittest.TestCase):
         with self.assertRaisesRegex(PolicyError, "jitter"):
             RetryPolicy.from_dict(make(jitter="gaussian"))
 
+    def test_invalid_strategy(self):
+        with self.assertRaisesRegex(PolicyError, "strategy"):
+            RetryPolicy.from_dict(make(strategy="fibonacci"))
+
+    def test_multiplier_rejected_for_linear_strategy(self):
+        with self.assertRaisesRegex(PolicyError, "multiplier"):
+            RetryPolicy.from_dict(make(strategy="linear", multiplier=3.0))
+
+    def test_multiplier_rejected_for_constant_strategy(self):
+        with self.assertRaisesRegex(PolicyError, "multiplier"):
+            RetryPolicy.from_dict(make(strategy="constant", multiplier=3.0))
+
     def test_defaults(self):
         policy = RetryPolicy.from_dict(make())
         self.assertEqual(policy.multiplier, 2.0)
         self.assertIsNone(policy.max_delay)
         self.assertEqual(policy.jitter, "none")
+        self.assertEqual(policy.strategy, "exponential")
 
     def test_accepts_all_fields(self):
         policy = RetryPolicy.from_dict(
@@ -118,6 +131,23 @@ class DelayBounds(unittest.TestCase):
         lo, hi = policy.delay_bounds(3)
         self.assertEqual(hi, 3.0)
         self.assertEqual(lo, 1.5)
+
+    def test_linear_strategy_grows_by_attempt_number(self):
+        policy = RetryPolicy.from_dict(make(base_delay=1.5, strategy="linear"))
+        self.assertEqual(policy.delay_bounds(1), (1.5, 1.5))
+        self.assertEqual(policy.delay_bounds(2), (3.0, 3.0))
+        self.assertEqual(policy.delay_bounds(3), (4.5, 4.5))
+
+    def test_constant_strategy_never_grows(self):
+        policy = RetryPolicy.from_dict(make(base_delay=2.0, strategy="constant"))
+        self.assertEqual(policy.delay_bounds(1), (2.0, 2.0))
+        self.assertEqual(policy.delay_bounds(5), (2.0, 2.0))
+
+    def test_max_delay_still_caps_linear_strategy(self):
+        policy = RetryPolicy.from_dict(
+            make(base_delay=1.0, strategy="linear", max_delay=2.5)
+        )
+        self.assertEqual(policy.delay_bounds(3), (2.5, 2.5))
 
 
 class Schedule(unittest.TestCase):
