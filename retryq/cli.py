@@ -33,6 +33,12 @@ def build_parser():
         metavar="N",
         help="only report the delay bounds for attempt N, instead of the full schedule",
     )
+    parser.add_argument(
+        "--format",
+        choices=("table", "json"),
+        default="table",
+        help="output format (default: table)",
+    )
     return parser
 
 
@@ -59,32 +65,61 @@ def main(argv=None):
         return 1
 
     if args.attempt is not None:
-        return _report_single_attempt(policy, args.attempt)
+        return _report_single_attempt(policy, args.attempt, args.format)
 
-    _print_schedule(policy)
+    _print_schedule(policy, args.format)
     return 0
 
 
-def _report_single_attempt(policy, attempt):
+def _report_single_attempt(policy, attempt, fmt):
     if not policy.will_retry(attempt):
-        print(f"attempt {attempt}: no retry (max_attempts is {policy.max_attempts})")
+        if fmt == "json":
+            print(json.dumps({
+                "attempt": attempt,
+                "will_retry": False,
+                "max_attempts": policy.max_attempts,
+            }))
+        else:
+            print(f"attempt {attempt}: no retry (max_attempts is {policy.max_attempts})")
         return 0
+
     lo, hi = policy.delay_bounds(attempt)
-    if lo == hi:
+    if fmt == "json":
+        print(json.dumps({
+            "attempt": attempt,
+            "will_retry": True,
+            "delay_min": lo,
+            "delay_max": hi,
+        }))
+    elif lo == hi:
         print(f"attempt {attempt}: delay {format_seconds(lo)}")
     else:
         print(f"attempt {attempt}: delay between {format_seconds(lo)} and {format_seconds(hi)}")
     return 0
 
 
-def _print_schedule(policy):
+def _print_schedule(policy, fmt):
+    rows = policy.schedule()
+    if fmt == "json":
+        print(json.dumps([
+            {
+                "attempt": attempt,
+                "delay_min": lo,
+                "delay_max": hi,
+                "elapsed_min": cum_lo,
+                "elapsed_max": cum_hi,
+            }
+            for attempt, lo, hi, cum_lo, cum_hi in rows
+        ]))
+        return
+
     header = (
         f"{'attempt':>7}  {'delay (min)':>12}  {'delay (max)':>12}  "
         f"{'elapsed (min)':>14}  {'elapsed (max)':>14}"
     )
     print(header)
     print("-" * len(header))
-    for attempt, lo, hi, cum_lo, cum_hi in policy.schedule():
+    for attempt, lo, hi, cum_lo, cum_hi in rows:
         print(
             f"{attempt:>7}  {format_seconds(lo):>12}  {format_seconds(hi):>12}  "
             f"{format_seconds(cum_lo):>14}  {format_seconds(cum_hi):>14}"

@@ -82,6 +82,19 @@ $ retryq policy.json --attempt 9
 attempt 9: no retry (max_attempts is 5)
 ```
 
+Get machine-readable output with `--format json`, either for the full
+schedule or a single attempt:
+
+```
+$ retryq policy.json --format json
+[{"attempt": 1, "delay_min": 0.0, "delay_max": 0.5, "elapsed_min": 0.0, "elapsed_max": 0.5}, ...]
+```
+
+```
+$ retryq policy.json --attempt 3 --format json
+{"attempt": 3, "will_retry": true, "delay_min": 0.0, "delay_max": 2.0}
+```
+
 ## Install
 
 No dependencies beyond the standard library. Run directly:
