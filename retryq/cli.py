@@ -1,5 +1,6 @@
 import argparse
 import json
+import random
 import sys
 
 from .policy import PolicyError, RetryPolicy
@@ -39,6 +40,18 @@ def build_parser():
         default="table",
         help="output format (default: table)",
     )
+    parser.add_argument(
+        "--simulate",
+        action="store_true",
+        help="show one concrete run, sampling an actual delay for each attempt "
+        "instead of min/max bounds",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        metavar="N",
+        help="seed the random generator used by --simulate, for a reproducible run",
+    )
     return parser
 
 
@@ -63,6 +76,17 @@ def main(argv=None):
     except PolicyError as exc:
         print(f"retryq: invalid policy: {exc}", file=sys.stderr)
         return 1
+
+    if args.seed is not None and not args.simulate:
+        print("retryq: --seed only applies with --simulate", file=sys.stderr)
+        return 1
+
+    if args.simulate:
+        rng = random.Random(args.seed)
+        if args.attempt is not None:
+            return _report_single_attempt_simulated(policy, args.attempt, args.format, rng)
+        _print_simulation(policy, args.format, rng)
+        return 0
 
     if args.attempt is not None:
         return _report_single_attempt(policy, args.attempt, args.format)
@@ -96,6 +120,46 @@ def _report_single_attempt(policy, attempt, fmt):
     else:
         print(f"attempt {attempt}: delay between {format_seconds(lo)} and {format_seconds(hi)}")
     return 0
+
+
+def _report_single_attempt_simulated(policy, attempt, fmt, rng):
+    if not policy.will_retry(attempt):
+        if fmt == "json":
+            print(json.dumps({
+                "attempt": attempt,
+                "will_retry": False,
+                "max_attempts": policy.max_attempts,
+            }))
+        else:
+            print(f"attempt {attempt}: no retry (max_attempts is {policy.max_attempts})")
+        return 0
+
+    delay = policy.sample_delay(attempt, rng)
+    if fmt == "json":
+        print(json.dumps({
+            "attempt": attempt,
+            "will_retry": True,
+            "delay": delay,
+        }))
+    else:
+        print(f"attempt {attempt}: delay {format_seconds(delay)}")
+    return 0
+
+
+def _print_simulation(policy, fmt, rng):
+    rows = policy.simulate(rng)
+    if fmt == "json":
+        print(json.dumps([
+            {"attempt": attempt, "delay": delay, "elapsed": cumulative}
+            for attempt, delay, cumulative in rows
+        ]))
+        return
+
+    header = f"{'attempt':>7}  {'delay':>12}  {'elapsed':>12}"
+    print(header)
+    print("-" * len(header))
+    for attempt, delay, cumulative in rows:
+        print(f"{attempt:>7}  {format_seconds(delay):>12}  {format_seconds(cumulative):>12}")
 
 
 def _print_schedule(policy, fmt):

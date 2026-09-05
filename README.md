@@ -82,6 +82,26 @@ $ retryq policy.json --attempt 9
 attempt 9: no retry (max_attempts is 5)
 ```
 
+Bounds tell you the range, but not what a single retry actually looks
+like. `--simulate` draws one concrete delay per attempt instead:
+
+```
+$ retryq policy.json --simulate
+attempt         delay      elapsed
+----------------------------------
+      1         0.31s        0.31s
+      2         0.58s        0.89s
+      3         1.74s        2.63s
+```
+
+Pass `--seed` to make a simulated run reproducible:
+
+```
+$ retryq policy.json --simulate --seed 42
+```
+
+`--simulate` also works with `--attempt` to sample a single attempt.
+
 Get machine-readable output with `--format json`, either for the full
 schedule or a single attempt:
 

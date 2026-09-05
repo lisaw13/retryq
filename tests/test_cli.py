@@ -50,5 +50,46 @@ class JsonFormat(unittest.TestCase):
         )
 
 
+class Simulate(unittest.TestCase):
+    def test_full_simulation_is_a_json_array(self):
+        code, output = run(["-", "--simulate", "--seed", "1", "--format", "json"])
+        self.assertEqual(code, 0)
+        rows = json.loads(output)
+        self.assertEqual(len(rows), 3)
+        for row in rows:
+            self.assertEqual(set(row), {"attempt", "delay", "elapsed"})
+
+    def test_same_seed_is_reproducible(self):
+        _, first = run(["-", "--simulate", "--seed", "7", "--format", "json"])
+        _, second = run(["-", "--simulate", "--seed", "7", "--format", "json"])
+        self.assertEqual(first, second)
+
+    def test_single_attempt_simulated(self):
+        code, output = run(["-", "--simulate", "--seed", "1", "--attempt", "2", "--format", "json"])
+        self.assertEqual(code, 0)
+        row = json.loads(output)
+        self.assertEqual(row["attempt"], 2)
+        self.assertTrue(row["will_retry"])
+        self.assertIn("delay", row)
+
+    def test_single_attempt_beyond_max_attempts(self):
+        code, output = run(["-", "--simulate", "--attempt", "9", "--format", "json"])
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            json.loads(output),
+            {"attempt": 9, "will_retry": False, "max_attempts": 3},
+        )
+
+    def test_seed_without_simulate_is_rejected(self):
+        code, output = run(["-", "--seed", "1"])
+        self.assertEqual(code, 1)
+
+    def test_table_format_has_a_delay_and_elapsed_column(self):
+        code, output = run(["-", "--simulate", "--seed", "1"])
+        self.assertEqual(code, 0)
+        self.assertIn("delay", output)
+        self.assertIn("elapsed", output)
+
+
 if __name__ == "__main__":
     unittest.main()

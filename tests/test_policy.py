@@ -1,3 +1,4 @@
+import random
 import unittest
 
 from retryq.policy import PolicyError, RetryPolicy
@@ -148,6 +149,61 @@ class DelayBounds(unittest.TestCase):
             make(base_delay=1.0, strategy="linear", max_delay=2.5)
         )
         self.assertEqual(policy.delay_bounds(3), (2.5, 2.5))
+
+
+class SampleDelay(unittest.TestCase):
+    def test_no_jitter_returns_the_computed_value(self):
+        policy = RetryPolicy.from_dict(make(base_delay=1.0, multiplier=2.0))
+        rng = random.Random(0)
+        self.assertEqual(policy.sample_delay(3, rng), 4.0)
+
+    def test_full_jitter_stays_within_bounds(self):
+        policy = RetryPolicy.from_dict(make(base_delay=1.0, jitter="full"))
+        rng = random.Random(0)
+        for attempt in range(1, policy.max_attempts + 1):
+            lo, hi = policy.delay_bounds(attempt)
+            sample = policy.sample_delay(attempt, rng)
+            self.assertGreaterEqual(sample, lo)
+            self.assertLessEqual(sample, hi)
+
+    def test_equal_jitter_stays_within_bounds(self):
+        policy = RetryPolicy.from_dict(make(base_delay=1.0, jitter="equal"))
+        rng = random.Random(0)
+        for attempt in range(1, policy.max_attempts + 1):
+            lo, hi = policy.delay_bounds(attempt)
+            sample = policy.sample_delay(attempt, rng)
+            self.assertGreaterEqual(sample, lo)
+            self.assertLessEqual(sample, hi)
+
+    def test_same_seed_gives_same_sample(self):
+        policy = RetryPolicy.from_dict(make(base_delay=1.0, jitter="full"))
+        first = policy.sample_delay(3, random.Random(42))
+        second = policy.sample_delay(3, random.Random(42))
+        self.assertEqual(first, second)
+
+    def test_respects_max_delay_cap(self):
+        policy = RetryPolicy.from_dict(
+            make(base_delay=1.0, multiplier=2.0, max_delay=3.0, jitter="full")
+        )
+        rng = random.Random(0)
+        for _ in range(50):
+            self.assertLessEqual(policy.sample_delay(3, rng), 3.0)
+
+
+class Simulate(unittest.TestCase):
+    def test_length_matches_max_attempts(self):
+        policy = RetryPolicy.from_dict(make(max_attempts=4))
+        rows = policy.simulate(random.Random(0))
+        self.assertEqual(len(rows), 4)
+
+    def test_elapsed_is_a_running_sum_of_delays(self):
+        policy = RetryPolicy.from_dict(make(max_attempts=3, jitter="full"))
+        rows = policy.simulate(random.Random(0))
+        delays = [row[1] for row in rows]
+        elapsed = [row[2] for row in rows]
+        self.assertAlmostEqual(elapsed[0], delays[0])
+        self.assertAlmostEqual(elapsed[1], delays[0] + delays[1])
+        self.assertAlmostEqual(elapsed[2], delays[0] + delays[1] + delays[2])
 
 
 class Schedule(unittest.TestCase):

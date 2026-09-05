@@ -99,18 +99,31 @@ class RetryPolicy:
     def will_retry(self, attempt):
         return 1 <= attempt <= self.max_attempts
 
-    def delay_bounds(self, attempt):
-        """Return (min, max) possible delay in seconds before this attempt."""
+    def _capped_delay(self, attempt):
         if attempt < 1:
             raise PolicyError("attempt must be at least 1")
         raw = self._uncapped_delay(attempt)
-        capped = raw if self.max_delay is None else min(raw, self.max_delay)
+        return raw if self.max_delay is None else min(raw, self.max_delay)
+
+    def delay_bounds(self, attempt):
+        """Return (min, max) possible delay in seconds before this attempt."""
+        capped = self._capped_delay(attempt)
         if self.jitter == "none":
             return capped, capped
         if self.jitter == "full":
             return 0.0, capped
         # "equal": half the delay is fixed, half is randomized on top of it
         return capped / 2, capped
+
+    def sample_delay(self, attempt, rng):
+        """Draw one concrete delay for this attempt using rng (a random.Random)."""
+        capped = self._capped_delay(attempt)
+        if self.jitter == "none":
+            return capped
+        if self.jitter == "full":
+            return rng.uniform(0.0, capped)
+        # "equal": half the delay is fixed, half is randomized on top of it
+        return capped / 2 + rng.uniform(0.0, capped / 2)
 
     def schedule(self):
         """Full per-attempt delay and cumulative elapsed time bounds."""
@@ -122,4 +135,14 @@ class RetryPolicy:
             cumulative_min += lo
             cumulative_max += hi
             rows.append((attempt, lo, hi, cumulative_min, cumulative_max))
+        return rows
+
+    def simulate(self, rng):
+        """One concrete run through the schedule, sampling each attempt's delay."""
+        rows = []
+        cumulative = 0.0
+        for attempt in range(1, self.max_attempts + 1):
+            delay = self.sample_delay(attempt, rng)
+            cumulative += delay
+            rows.append((attempt, delay, cumulative))
         return rows
