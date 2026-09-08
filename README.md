@@ -39,6 +39,11 @@ random by design.
   - `none` — no randomness, delay is exactly the computed value.
   - `full` — delay is a random value between 0 and the computed value.
   - `equal` — delay is half fixed, half random on top of that.
+  - `decorrelated` — AWS-style decorrelated jitter: each delay is a random
+    value between `base_delay` and three times the previous delay. Growth
+    isn't set by `strategy`/`multiplier` (which don't apply here); it only
+    applies with the default `exponential` strategy, since it defines its
+    own curve.
 
 ## Usage
 

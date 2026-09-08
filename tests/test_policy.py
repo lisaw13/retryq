@@ -73,6 +73,14 @@ class FromDictValidation(unittest.TestCase):
         with self.assertRaisesRegex(PolicyError, "multiplier"):
             RetryPolicy.from_dict(make(strategy="constant", multiplier=3.0))
 
+    def test_decorrelated_jitter_rejected_for_linear_strategy(self):
+        with self.assertRaisesRegex(PolicyError, "decorrelated"):
+            RetryPolicy.from_dict(make(strategy="linear", jitter="decorrelated"))
+
+    def test_decorrelated_jitter_rejects_explicit_multiplier(self):
+        with self.assertRaisesRegex(PolicyError, "multiplier"):
+            RetryPolicy.from_dict(make(jitter="decorrelated", multiplier=3.0))
+
     def test_defaults(self):
         policy = RetryPolicy.from_dict(make())
         self.assertEqual(policy.multiplier, 2.0)
@@ -150,6 +158,24 @@ class DelayBounds(unittest.TestCase):
         )
         self.assertEqual(policy.delay_bounds(3), (2.5, 2.5))
 
+    def test_decorrelated_jitter_min_is_always_base_delay(self):
+        policy = RetryPolicy.from_dict(make(base_delay=1.0, jitter="decorrelated"))
+        for attempt in (1, 2, 5):
+            lo, _ = policy.delay_bounds(attempt)
+            self.assertEqual(lo, 1.0)
+
+    def test_decorrelated_jitter_max_grows_by_factor_of_three(self):
+        policy = RetryPolicy.from_dict(make(base_delay=1.0, jitter="decorrelated"))
+        self.assertEqual(policy.delay_bounds(1), (1.0, 3.0))
+        self.assertEqual(policy.delay_bounds(2), (1.0, 9.0))
+        self.assertEqual(policy.delay_bounds(3), (1.0, 27.0))
+
+    def test_decorrelated_jitter_max_respects_cap(self):
+        policy = RetryPolicy.from_dict(
+            make(base_delay=1.0, jitter="decorrelated", max_delay=5.0)
+        )
+        self.assertEqual(policy.delay_bounds(3), (1.0, 5.0))
+
 
 class SampleDelay(unittest.TestCase):
     def test_no_jitter_returns_the_computed_value(self):
@@ -189,6 +215,23 @@ class SampleDelay(unittest.TestCase):
         for _ in range(50):
             self.assertLessEqual(policy.sample_delay(3, rng), 3.0)
 
+    def test_decorrelated_jitter_stays_within_bounds(self):
+        policy = RetryPolicy.from_dict(make(base_delay=1.0, jitter="decorrelated"))
+        rng = random.Random(0)
+        for attempt in range(1, policy.max_attempts + 1):
+            lo, hi = policy.delay_bounds(attempt)
+            sample = policy.sample_delay(attempt, rng)
+            self.assertGreaterEqual(sample, lo)
+            self.assertLessEqual(sample, hi)
+
+    def test_decorrelated_jitter_respects_max_delay_cap(self):
+        policy = RetryPolicy.from_dict(
+            make(base_delay=1.0, jitter="decorrelated", max_delay=3.0)
+        )
+        rng = random.Random(0)
+        for _ in range(50):
+            self.assertLessEqual(policy.sample_delay(5, rng), 3.0)
+
 
 class Simulate(unittest.TestCase):
     def test_length_matches_max_attempts(self):
@@ -204,6 +247,16 @@ class Simulate(unittest.TestCase):
         self.assertAlmostEqual(elapsed[0], delays[0])
         self.assertAlmostEqual(elapsed[1], delays[0] + delays[1])
         self.assertAlmostEqual(elapsed[2], delays[0] + delays[1] + delays[2])
+
+    def test_decorrelated_jitter_delays_stay_within_bounds(self):
+        policy = RetryPolicy.from_dict(
+            make(max_attempts=4, base_delay=1.0, jitter="decorrelated")
+        )
+        rows = policy.simulate(random.Random(0))
+        for attempt, delay, _ in rows:
+            lo, hi = policy.delay_bounds(attempt)
+            self.assertGreaterEqual(delay, lo)
+            self.assertLessEqual(delay, hi)
 
 
 class Schedule(unittest.TestCase):

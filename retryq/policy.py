@@ -9,7 +9,7 @@ bounds are.
 from dataclasses import dataclass
 from typing import Optional
 
-VALID_JITTER = {"none", "full", "equal"}
+VALID_JITTER = {"none", "full", "equal", "decorrelated"}
 VALID_STRATEGY = {"exponential", "linear", "constant"}
 
 
@@ -80,6 +80,16 @@ class RetryPolicy:
                 "jitter must be one of {}, got {!r}".format(sorted(VALID_JITTER), jitter)
             )
 
+        if jitter == "decorrelated":
+            if strategy != "exponential":
+                raise PolicyError(
+                    "decorrelated jitter does not apply to the {} strategy".format(strategy)
+                )
+            if "multiplier" in data:
+                raise PolicyError(
+                    "multiplier does not apply to decorrelated jitter, which grows by a fixed factor of 3"
+                )
+
         return cls(
             max_attempts=max_attempts,
             base_delay=base_delay,
@@ -107,6 +117,16 @@ class RetryPolicy:
 
     def delay_bounds(self, attempt):
         """Return (min, max) possible delay in seconds before this attempt."""
+        if self.jitter == "decorrelated":
+            if attempt < 1:
+                raise PolicyError("attempt must be at least 1")
+            # Each step's upper bound is 3x the previous one's, so the worst
+            # case after n steps is base_delay * 3**n regardless of what was
+            # actually sampled in between; the cap absorbs once reached.
+            hi = self.base_delay * (3 ** attempt)
+            if self.max_delay is not None:
+                hi = min(hi, self.max_delay)
+            return self.base_delay, hi
         capped = self._capped_delay(attempt)
         if self.jitter == "none":
             return capped, capped
@@ -116,7 +136,20 @@ class RetryPolicy:
         return capped / 2, capped
 
     def sample_delay(self, attempt, rng):
-        """Draw one concrete delay for this attempt using rng (a random.Random)."""
+        """Draw one concrete delay for this attempt using rng (a random.Random).
+
+        Decorrelated jitter is stateful: each step's range depends on the
+        previous step's sampled delay. Called on its own (rather than through
+        simulate()), it replays the chain from attempt 1 so the result is a
+        valid sample of that attempt in isolation.
+        """
+        if self.jitter == "decorrelated":
+            if attempt < 1:
+                raise PolicyError("attempt must be at least 1")
+            previous = self.base_delay
+            for _ in range(attempt):
+                previous = self._decorrelated_step(previous, rng)
+            return previous
         capped = self._capped_delay(attempt)
         if self.jitter == "none":
             return capped
@@ -124,6 +157,10 @@ class RetryPolicy:
             return rng.uniform(0.0, capped)
         # "equal": half the delay is fixed, half is randomized on top of it
         return capped / 2 + rng.uniform(0.0, capped / 2)
+
+    def _decorrelated_step(self, previous, rng):
+        delay = rng.uniform(self.base_delay, previous * 3)
+        return delay if self.max_delay is None else min(delay, self.max_delay)
 
     def schedule(self):
         """Full per-attempt delay and cumulative elapsed time bounds."""
@@ -141,8 +178,13 @@ class RetryPolicy:
         """One concrete run through the schedule, sampling each attempt's delay."""
         rows = []
         cumulative = 0.0
+        previous = self.base_delay
         for attempt in range(1, self.max_attempts + 1):
-            delay = self.sample_delay(attempt, rng)
+            if self.jitter == "decorrelated":
+                previous = self._decorrelated_step(previous, rng)
+                delay = previous
+            else:
+                delay = self.sample_delay(attempt, rng)
             cumulative += delay
             rows.append((attempt, delay, cumulative))
         return rows

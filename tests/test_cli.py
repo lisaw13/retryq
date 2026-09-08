@@ -50,6 +50,33 @@ class JsonFormat(unittest.TestCase):
         )
 
 
+class DecorrelatedJitter(unittest.TestCase):
+    def run_with(self, argv):
+        out = io.StringIO()
+        policy = dict(POLICY)
+        del policy["multiplier"]
+        policy["jitter"] = "decorrelated"
+        with mock.patch.object(cli.sys, "stdin", io.StringIO(json.dumps(policy))):
+            with redirect_stdout(out):
+                code = cli.main(argv)
+        return code, out.getvalue()
+
+    def test_schedule_bounds_grow_by_factor_of_three(self):
+        code, output = self.run_with(["-", "--format", "json"])
+        self.assertEqual(code, 0)
+        rows = json.loads(output)
+        self.assertEqual([row["delay_min"] for row in rows], [1.0, 1.0, 1.0])
+        self.assertEqual([row["delay_max"] for row in rows], [3.0, 9.0, 27.0])
+
+    def test_simulated_run_stays_within_bounds(self):
+        code, output = self.run_with(["-", "--simulate", "--seed", "1", "--format", "json"])
+        self.assertEqual(code, 0)
+        rows = json.loads(output)
+        self.assertEqual(len(rows), 3)
+        for row in rows:
+            self.assertGreaterEqual(row["delay"], 1.0)
+
+
 class Simulate(unittest.TestCase):
     def test_full_simulation_is_a_json_array(self):
         code, output = run(["-", "--simulate", "--seed", "1", "--format", "json"])
