@@ -189,6 +189,13 @@ def _print_schedule(policy, fmt):
             f"{format_seconds(cum_lo):>14}  {format_seconds(cum_hi):>14}"
         )
 
+    total_lo, total_hi = rows[-1][3], rows[-1][4]
+    print()
+    if total_lo == total_hi:
+        print(f"total wait time: {format_seconds(total_lo)}")
+    else:
+        print(f"total wait time: {format_seconds(total_lo)} to {format_seconds(total_hi)}")
+
 
 if __name__ == "__main__":
     sys.exit(main())

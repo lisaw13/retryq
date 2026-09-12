@@ -118,5 +118,22 @@ class Simulate(unittest.TestCase):
         self.assertIn("elapsed", output)
 
 
+class ScheduleSummary(unittest.TestCase):
+    def test_total_collapses_to_one_value_without_jitter(self):
+        code, output = run(["-"])
+        self.assertEqual(code, 0)
+        self.assertIn("total wait time: 7.00s", output)
+
+    def test_table_format_reports_a_range_with_jitter(self):
+        out = io.StringIO()
+        policy = dict(POLICY)
+        policy["jitter"] = "full"
+        with mock.patch.object(cli.sys, "stdin", io.StringIO(json.dumps(policy))):
+            with redirect_stdout(out):
+                code = cli.main(["-"])
+        self.assertEqual(code, 0)
+        self.assertIn("total wait time: 0.00s to 7.00s", out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

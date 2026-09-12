@@ -58,6 +58,8 @@ attempt   delay (min)   delay (max)   elapsed (min)   elapsed (max)
       3         0.00s         2.00s           0.00s           3.50s
       4         0.00s         4.00s           0.00s           7.50s
       5         0.00s         8.00s           0.00s          15.50s
+
+total wait time: 0.00s to 15.50s
 ```
 
 From stdin, so it composes with whatever produced the config:
