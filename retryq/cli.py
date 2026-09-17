@@ -164,17 +164,23 @@ def _print_simulation(policy, fmt, rng):
 
 def _print_schedule(policy, fmt):
     rows = policy.schedule()
+    total_lo, total_hi = rows[-1][3], rows[-1][4]
+
     if fmt == "json":
-        print(json.dumps([
-            {
-                "attempt": attempt,
-                "delay_min": lo,
-                "delay_max": hi,
-                "elapsed_min": cum_lo,
-                "elapsed_max": cum_hi,
-            }
-            for attempt, lo, hi, cum_lo, cum_hi in rows
-        ]))
+        print(json.dumps({
+            "schedule": [
+                {
+                    "attempt": attempt,
+                    "delay_min": lo,
+                    "delay_max": hi,
+                    "elapsed_min": cum_lo,
+                    "elapsed_max": cum_hi,
+                }
+                for attempt, lo, hi, cum_lo, cum_hi in rows
+            ],
+            "total_wait_min": total_lo,
+            "total_wait_max": total_hi,
+        }))
         return
 
     header = (
@@ -189,7 +195,6 @@ def _print_schedule(policy, fmt):
             f"{format_seconds(cum_lo):>14}  {format_seconds(cum_hi):>14}"
         )
 
-    total_lo, total_hi = rows[-1][3], rows[-1][4]
     print()
     if total_lo == total_hi:
         print(f"total wait time: {format_seconds(total_lo)}")

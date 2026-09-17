@@ -22,16 +22,19 @@ def run(argv):
 
 
 class JsonFormat(unittest.TestCase):
-    def test_full_schedule_is_a_json_array(self):
+    def test_full_schedule_includes_rows_and_totals(self):
         code, output = run(["-", "--format", "json"])
         self.assertEqual(code, 0)
-        rows = json.loads(output)
+        data = json.loads(output)
+        rows = data["schedule"]
         self.assertEqual(len(rows), 3)
         self.assertEqual(
             rows[0],
             {"attempt": 1, "delay_min": 1.0, "delay_max": 1.0, "elapsed_min": 1.0, "elapsed_max": 1.0},
         )
         self.assertEqual(rows[2]["elapsed_max"], 7.0)
+        self.assertEqual(data["total_wait_min"], 7.0)
+        self.assertEqual(data["total_wait_max"], 7.0)
 
     def test_single_attempt_that_will_retry(self):
         code, output = run(["-", "--attempt", "2", "--format", "json"])
@@ -64,7 +67,7 @@ class DecorrelatedJitter(unittest.TestCase):
     def test_schedule_bounds_grow_by_factor_of_three(self):
         code, output = self.run_with(["-", "--format", "json"])
         self.assertEqual(code, 0)
-        rows = json.loads(output)
+        rows = json.loads(output)["schedule"]
         self.assertEqual([row["delay_min"] for row in rows], [1.0, 1.0, 1.0])
         self.assertEqual([row["delay_max"] for row in rows], [3.0, 9.0, 27.0])
 

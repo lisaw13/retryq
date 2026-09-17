@@ -110,11 +110,12 @@ $ retryq policy.json --simulate --seed 42
 `--simulate` also works with `--attempt` to sample a single attempt.
 
 Get machine-readable output with `--format json`, either for the full
-schedule or a single attempt:
+schedule or a single attempt. The full schedule includes `total_wait_min`
+and `total_wait_max` alongside the per-attempt rows:
 
 ```
 $ retryq policy.json --format json
-[{"attempt": 1, "delay_min": 0.0, "delay_max": 0.5, "elapsed_min": 0.0, "elapsed_max": 0.5}, ...]
+{"schedule": [{"attempt": 1, "delay_min": 0.0, "delay_max": 0.5, "elapsed_min": 0.0, "elapsed_max": 0.5}, ...], "total_wait_min": 0.0, "total_wait_max": 15.5}
 ```
 
 ```
